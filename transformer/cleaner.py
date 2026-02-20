@@ -66,7 +66,8 @@ class DataCleaner(BaseTransformer):
 
     def _drop_duplicates(self, df: pd.DataFrame) -> pd.DataFrame:
         before = len(df)
-        df = df.drop_duplicates()
+        df = df.drop_duplicates(keep='first')
+        df = df.reset_index(drop=True)
         dropped = before - len(df)
         if dropped:
             self.logger.info("Dropped %d duplicate rows.", dropped)
