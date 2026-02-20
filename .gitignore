@@ -1,0 +1,10 @@
+output/
+logs/
+etl_output.db
+__pycache__/
+*.pyc
+.env
+.venv/
+*.egg-info/
+dist/
+build/
