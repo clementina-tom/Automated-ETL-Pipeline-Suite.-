@@ -1,0 +1,46 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.env
+.venv
+
+# Prefect
+.prefect/
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# Pipeline specific ignores (do not ship local state)
+logs/
+output/
+etl_output.db
+*.db
+*.sqlite3
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store

@@ -55,8 +55,8 @@ MASTER_COLUMNS = [
 # Logging
 # ──────────────────────────────────────────────
 LOG_LEVEL = logging.DEBUG
-LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(message)s"
+LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 LOG_FILE = LOGS_DIR / "etl.log"
 LOG_MAX_BYTES = 5 * 1024 * 1024   # 5 MB
 LOG_BACKUP_COUNT = 3
@@ -65,16 +65,27 @@ LOG_BACKUP_COUNT = 3
 def get_logger(name: str) -> logging.Logger:
     """
     Return a named logger configured with:
-      - RotatingFileHandler  → logs/etl.log
-      - StreamHandler        → stdout
+      - RotatingFileHandler  → logs/etl.log (JSON)
+      - StreamHandler        → stdout (Text/JSON depending on environment)
     """
+    try:
+        from pythonjsonlogger import jsonlogger
+        has_json_logger = True
+    except ImportError:
+        has_json_logger = False
+
     logger = logging.getLogger(name)
 
     if logger.handlers:          # Avoid duplicate handlers on re-import
         return logger
 
     logger.setLevel(LOG_LEVEL)
-    formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+    
+    if has_json_logger:
+        formatter = jsonlogger.JsonFormatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+    else:
+        # Fallback for plain text if jsonlogger isn't installed yet
+        formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
     # File handler
     fh = RotatingFileHandler(

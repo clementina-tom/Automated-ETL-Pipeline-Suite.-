@@ -47,17 +47,24 @@ class SQLiteLoader(BaseLoader):
             return
 
         try:
-            df.to_sql(
+            # Inject run_id for artifact versioning
+            from datetime import datetime, timezone
+            timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+            versioned_df = df.copy()
+            versioned_df["run_id"] = timestamp
+
+            versioned_df.to_sql(
                 name=self.table_name,
                 con=self._engine,
                 if_exists=self.if_exists,
                 index=self.index,
             )
             self.logger.info(
-                "Wrote %d rows to table '%s' in %s.",
-                len(df),
+                "Wrote %d rows to table '%s' in %s (run_id: %s).",
+                len(versioned_df),
                 self.table_name,
                 self.db_url,
+                timestamp
             )
         except SQLAlchemyError as exc:
             self.logger.exception(

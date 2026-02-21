@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/YOUR_USERNAME/etl_pipeline/actions/workflows/verify.yml/badge.svg)
 
-A modular, object-oriented Python ETL pipeline for web data extraction, transformation, validation, and loading.
+A modular, object-oriented Python ETL pipeline for web and API data extraction, transformation, validation, and loading. Orchestrated by Prefect.
 
 ---
 
@@ -10,39 +10,39 @@ A modular, object-oriented Python ETL pipeline for web data extraction, transfor
 
 ```
 etl_pipeline/
-├── config.py                    # Central settings & logging factory
-├── pipeline.py                  # Orchestrator (Extract→Transform→Validate→Load)
+├── config.py                    # Central settings & structured JSON logging
+├── pipeline.py                  # Prefect Orchestrator (Extract→Transform→Validate→Load)
 ├── requirements.txt
+├── Dockerfile                   # For containerization
+├── .dockerignore
 │
 ├── extractor/
-│   ├── base_extractor.py        # Abstract base with run() wrapper
-│   ├── web_extractor.py         # requests + BeautifulSoup (static pages)
-│   └── playwright_extractor.py  # Playwright (JS-heavy pages)
+│   ├── base_extractor.py
+│   ├── web_extractor.py
+│   ├── playwright_extractor.py
+│   ├── api_extractor.py         # REST API source
+│   └── db_extractor.py          # SQLAlchemy DB source
 │
 ├── transformer/
 │   ├── base_transformer.py
-│   ├── cleaner.py               # DataCleaner – normalise, dedup, null-drop
-│   └── mapper.py                # EntityMapper – merge Beneficiaries ↔ Gifts
+│   ├── cleaner.py
+│   └── mapper.py
 │
 ├── validator/
 │   ├── base_validator.py
-│   ├── schema_validator.py      # Required columns + dtype checks
-│   └── id_validator.py          # Null/duplicate ID checks
+│   ├── schema_validator.py
+│   └── id_validator.py
 │
 ├── loader/
 │   ├── base_loader.py
-│   ├── sqlite_loader.py         # SQLAlchemy → SQLite
-│   └── csv_loader.py            # Timestamped CSV output
+│   ├── sqlite_loader.py         # Versioned SQLAlchemy SQLite output
+│   ├── csv_loader.py            # Versioned timestamped CSV output
+│   └── s3_loader.py             # Push to AWS S3 buckets
 │
 ├── tests/
-│   ├── test_transformer.py
-│   ├── test_validator.py
-│   └── test_loader.py
 │
 ├── .github/workflows/
-│   └── verify.yml               # GitHub Actions CI
-├── output/                      # CSV artefacts (git-ignored)
-└── logs/                        # Rotating log files (git-ignored)
+│   └── verify.yml               # CI with scheduled runs & Docker build check
 ```
 
 ---
