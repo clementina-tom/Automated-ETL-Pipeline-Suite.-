@@ -1,118 +1,185 @@
-# ETL Pipeline Suite
+# Automated ETL Pipeline Suite
 
-![CI](https://github.com/YOUR_USERNAME/etl_pipeline/actions/workflows/verify.yml/badge.svg)
-
-A modular, object-oriented Python ETL pipeline for web and API data extraction, transformation, validation, and loading. Orchestrated by Prefect.
+A modular Python ETL toolkit for extraction, transformation, validation, and loading with optional Prefect orchestration.
 
 ---
 
-## Project Structure
+## What this project provides
 
-```
-etl_pipeline/
-├── config.py                    # Central settings & structured JSON logging
-├── pipeline.py                  # Prefect Orchestrator (Extract→Transform→Validate→Load)
-├── requirements.txt
-├── Dockerfile                   # For containerization
-├── .dockerignore
-│
-├── extractor/
-│   ├── base_extractor.py
-│   ├── web_extractor.py
-│   ├── playwright_extractor.py
-│   ├── api_extractor.py         # REST API source
-│   └── db_extractor.py          # SQLAlchemy DB source
-│
-├── transformer/
-│   ├── base_transformer.py
-│   ├── cleaner.py
-│   └── mapper.py
-│
-├── validator/
-│   ├── base_validator.py
-│   ├── schema_validator.py
-│   └── id_validator.py
-│
-├── loader/
-│   ├── base_loader.py
-│   ├── sqlite_loader.py         # Versioned SQLAlchemy SQLite output
-│   ├── csv_loader.py            # Versioned timestamped CSV output
-│   └── s3_loader.py             # Push to AWS S3 buckets
-│
-├── tests/
-│
-├── .github/workflows/
-│   └── verify.yml               # CI with scheduled runs & Docker build check
-```
+- Pluggable extractors (`WebExtractor`, `PlaywrightExtractor`, `APIExtractor`, `DatabaseExtractor`)
+- Reusable transforms (`DataCleaner`, `EntityMapper`)
+- Validation layer (`SchemaValidator`, `IDValidator`)
+- Multiple loaders (`SQLiteLoader`, `CSVLoader`, `S3Loader`)
+- Library-first API (`run_etl`, `ETLPipeline`, `ETLPipelineBuilder`)
+- Optional Prefect flow wrapper in `pipeline.py`
 
 ---
 
-## Quick Start
+## Python & system requirements
 
-### 1. Install dependencies
+- Python **3.10+** (project metadata requires `>=3.10`)
+- `pip`
+- For Playwright extractor: browser dependencies + Chromium
+
+---
+
+## Installation
+
+### Option A: Install as a local package (recommended)
 
 ```bash
+python -m pip install --upgrade pip
+pip install -e .
+```
+
+### Option B: Install from requirements file
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-playwright install chromium
 ```
 
-### 2. Configure your source
+### Playwright setup (only if using PlaywrightExtractor)
 
-Edit `config.py`:
-
-```python
-DEFAULT_SCRAPE_URL = "https://your-target-site.com"
-BENEFICIARY_JOIN_KEY = "beneficiary_id"
-SQLITE_DB_PATH = BASE_DIR / "etl_output.db"
+```bash
+playwright install --with-deps chromium
 ```
 
-### 3. Run the pipeline (dry-run with synthetic data)
+---
+
+## Repository structure (actual paths)
+
+```text
+.
+├── config.py
+├── pipeline.py
+├── etl_pipeline/          # Library interface
+│   ├── __init__.py
+│   └── library.py
+├── extractor/
+├── transformer/
+├── validator/
+├── loader/
+├── tests/
+├── pyproject.toml
+├── requirements.txt
+└── Dockerfile
+```
+
+---
+
+## Quick start (CLI/script)
+
+Run the default Prefect-backed flow with synthetic sample input:
 
 ```bash
 python pipeline.py
 ```
 
-Outputs:
+Artifacts produced:
+
 - `output/master_table_YYYYMMDD_HHMMSS.csv`
-- `etl_output.db` (SQLite)
+- `etl_output.db`
 - `logs/etl.log`
 
-### 4. Run tests
+---
 
-```bash
-python -m pytest tests/ -v
+## Use as a library
+
+### One-shot API (`run_etl`)
+
+```python
+from etl_pipeline import PipelineConfig, run_etl
+from extractor.api_extractor import APIExtractor
+from extractor.web_extractor import WebExtractor
+
+beneficiaries = WebExtractor("https://example.com/beneficiaries")
+gifts = APIExtractor("https://example.com/api/gifts", page_size=100)
+
+master_df = run_etl(
+    config=PipelineConfig(source_mode="custom"),
+    beneficiaries_extractor=beneficiaries,
+    gifts_extractor=gifts,
+)
+```
+
+### Builder API (`ETLPipelineBuilder`)
+
+```python
+from etl_pipeline import ETLPipelineBuilder
+from extractor.web_extractor import WebExtractor
+from extractor.api_extractor import APIExtractor
+
+pipeline = (
+    ETLPipelineBuilder()
+    .with_source_mode("custom")
+    .with_beneficiaries_extractor(WebExtractor("https://example.com/beneficiaries"))
+    .with_gifts_extractor(APIExtractor("https://example.com/api/gifts", page_size=100))
+    .build()
+)
+
+master_df = pipeline.run()
 ```
 
 ---
 
-## Extending the Pipeline
+## Running tests
 
-| Task | What to do |
-|---|---|
-| New data source | Subclass `BaseExtractor`, override `extract()` |
-| Custom JS interaction | Subclass `PlaywrightExtractor`, override `_parse_page(page)` |
-| New cleaning rule | Subclass `DataCleaner` or extend `transform()` |
-| Different join logic | Subclass `EntityMapper`, set `how="inner"` etc. |
-| Load to PostgreSQL | Subclass `BaseLoader`, swap the SQLAlchemy URL |
+```bash
+pytest -v
+```
 
----
+The suite includes:
 
-## Master Table Schema
-
-| Column | Type | Description |
-|---|---|---|
-| `id` | str | Primary key (Gift ID) |
-| `beneficiary_name` | str | Recipient full name |
-| `gift_type` | str | Cash / In-Kind / Other |
-| `amount` | float | Monetary value |
-| `date` | datetime | Date of gift |
-| `status` | str | Beneficiary status |
-| `source_url` | str | Scraped from URL |
-| `processed_at` | datetime | UTC pipeline run time |
+- unit tests for transformers, validators, loaders
+- integration-style tests using a real local HTTP server
+- integration-style tests using a temporary SQLite database
 
 ---
 
-## GitHub Actions
+## Configuration notes
 
-CI runs on every push to `main` / `develop` and on all PRs.
-Installs Playwright with Chromium and runs `pytest` across Python 3.11 and 3.12.
+Core defaults are in `config.py`:
+
+- `DEFAULT_SCRAPE_URL`
+- `REQUEST_TIMEOUT_SECONDS`
+- `SQLITE_DATABASE_URL`
+- `MASTER_COLUMNS`
+
+Pipeline runtime mode is configured with `PipelineConfig` in `pipeline.py`:
+
+- `source_mode="synthetic"` for sample input
+- `source_mode="custom"` for injected extractors
+
+---
+
+## Troubleshooting
+
+### `ModuleNotFoundError` for `etl_pipeline`
+Install the package in editable mode from repo root:
+
+```bash
+pip install -e .
+```
+
+### Playwright errors about missing browser
+Install Chromium:
+
+```bash
+playwright install --with-deps chromium
+```
+
+### Validation errors abort the run
+Inspect logs at `logs/etl.log` and verify extracted columns include:
+
+- `id`
+- `beneficiary_name`
+- `gift_type`
+- `amount`
+- `date`
+
+---
+
+## CI
+
+GitHub Actions runs tests across Python 3.11 and 3.12 and verifies Docker build.
