@@ -1,145 +1,246 @@
-"""
-pipeline.py
-Top-level orchestrator: wire Extract → Transform → Validate → Load.
-"""
+"""Top-level orchestrator for Extract → Transform → Validate → Load."""
 
-import sys
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import pandas as pd
+from prefect import flow, task
 
 import config
 from config import get_logger
-from extractor.web_extractor import WebExtractor
-from extractor.playwright_extractor import PlaywrightExtractor
+from extractor.base_extractor import BaseExtractor
+from loader.base_loader import BaseLoader
+from loader.csv_loader import CSVLoader
+from loader.sqlite_loader import SQLiteLoader
 from transformer.cleaner import DataCleaner
 from transformer.mapper import EntityMapper
-from validator.schema_validator import SchemaValidator
 from validator.id_validator import IDValidator
-from loader.sqlite_loader import SQLiteLoader
-from loader.csv_loader import CSVLoader
+from validator.schema_validator import SchemaValidator
 
 logger = get_logger("pipeline")
 
-# ──────────────────────────────────────────────────────────────────────
-# Sample data generator (remove when you have real sources)
-# ──────────────────────────────────────────────────────────────────────
 
-def _sample_beneficiaries() -> pd.DataFrame:
-    """Synthetic Beneficiaries table for dry-run testing."""
-    return pd.DataFrame({
-        "beneficiary_id": ["B001", "B002", "B003"],
-        "beneficiary_name": ["  Alice  ", "Bob", "Charlie"],
-        "status": ["active", "inactive", "active"],
-        "source_url": [config.DEFAULT_SCRAPE_URL] * 3,
-    })
+@dataclass
+class EntityConfig:
+    """Entity extraction + cleaning configuration."""
+
+    name: str
+    extractor: BaseExtractor | None = None
+    required_columns: list[str] = field(default_factory=list)
+    date_columns: list[str] = field(default_factory=list)
 
 
-def _sample_gifts() -> pd.DataFrame:
-    """Synthetic Gifts table for dry-run testing."""
-    return pd.DataFrame({
-        "beneficiary_id": ["B001", "B002", "B003"],
-        "id": ["G001", "G002", "G003"],
-        "gift_type": ["Cash", "In-Kind", "Cash"],
-        "amount": [500.0, 200.0, 150.0],
-        "date": ["2024-01-15", "2024-02-20", "2024-03-05"],
-    })
+@dataclass
+class PipelineConfig:
+    """Runtime configuration for ETL execution."""
+
+    source_mode: str = "synthetic"  # synthetic | custom
+    entities: list[EntityConfig] = field(default_factory=list)
+    left_entity: str = "beneficiaries"
+    right_entity: str = "gifts"
+    join_left_key: str = config.BENEFICIARY_JOIN_KEY
+    join_right_key: str = config.GIFT_JOIN_KEY
+    output_columns: list[str] | None = None
+    quarantine_invalid_rows: bool = False
+    quarantine_dir: Path = config.OUTPUT_DIR / "quarantine"
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Pipeline Tasks
-# ──────────────────────────────────────────────────────────────────────
+def _sample_entity_data() -> dict[str, pd.DataFrame]:
+    return {
+        "beneficiaries": pd.DataFrame(
+            {
+                "beneficiary_id": ["B001", "B002", "B003"],
+                "beneficiary_name": ["  Alice  ", "Bob", "Charlie"],
+                "status": ["active", "inactive", "active"],
+                "source_url": [config.DEFAULT_SCRAPE_URL] * 3,
+            }
+        ),
+        "gifts": pd.DataFrame(
+            {
+                "beneficiary_id": ["B001", "B002", "B003"],
+                "id": ["G001", "G002", "G003"],
+                "gift_type": ["Cash", "In-Kind", "Cash"],
+                "amount": [500.0, 200.0, 150.0],
+                "date": ["2024-01-15", "2024-02-20", "2024-03-05"],
+            }
+        ),
+    }
 
-from prefect import flow, task
 
-@task(name="Extract Data")
-def extract_data(use_playwright: bool) -> tuple[pd.DataFrame, pd.DataFrame]:
-    logger.info("Starting extraction...")
-    # Replace the synthetic samples with real extractor calls later
-    raw_beneficiaries = _sample_beneficiaries()
-    raw_gifts = _sample_gifts()
-    logger.info(
-        "Extracted %d beneficiary rows and %d gift rows.",
-        len(raw_beneficiaries),
-        len(raw_gifts),
+def _default_entities() -> list[EntityConfig]:
+    return [
+        EntityConfig(name="beneficiaries", required_columns=["beneficiary_id"]),
+        EntityConfig(name="gifts", required_columns=["beneficiary_id"], date_columns=["date"]),
+    ]
+
+
+def extract_entities_sync(cfg: PipelineConfig) -> dict[str, pd.DataFrame]:
+    logger.info("Starting extraction mode=%s", cfg.source_mode)
+    entities = cfg.entities or _default_entities()
+
+    if cfg.source_mode == "synthetic":
+        sample_data = _sample_entity_data()
+        extracted: dict[str, pd.DataFrame] = {}
+        for entity in entities:
+            if entity.name not in sample_data:
+                raise ValueError(f"No synthetic sample configured for entity '{entity.name}'")
+            extracted[entity.name] = sample_data[entity.name]
+        return extracted
+
+    if cfg.source_mode == "custom":
+        extracted = {}
+        for entity in entities:
+            if entity.extractor is None:
+                raise ValueError(
+                    f"Entity '{entity.name}' is missing an extractor in source_mode='custom'"
+                )
+            extracted[entity.name] = entity.extractor.run()
+        return extracted
+
+    raise ValueError(f"Unsupported source_mode: {cfg.source_mode}")
+
+
+def transform_entities_sync(cfg: PipelineConfig, entity_frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    entities = cfg.entities or _default_entities()
+
+    cleaned: dict[str, pd.DataFrame] = {}
+    for entity in entities:
+        cleaner = DataCleaner(
+            required_columns=entity.required_columns,
+            date_columns=entity.date_columns,
+        )
+        cleaned[entity.name] = cleaner.run(entity_frames[entity.name])
+
+    if cfg.left_entity not in cleaned or cfg.right_entity not in cleaned:
+        raise ValueError("Configured left_entity/right_entity not found in extracted entities")
+
+    mapper = EntityMapper(
+        right_df=cleaned[cfg.right_entity],
+        left_key=cfg.join_left_key,
+        right_key=cfg.join_right_key,
+        output_columns=cfg.output_columns,
     )
-    return raw_beneficiaries, raw_gifts
+    return mapper.run(cleaned[cfg.left_entity])
 
 
-@task(name="Clean and Map Data")
-def transform_data(raw_beneficiaries: pd.DataFrame, raw_gifts: pd.DataFrame) -> pd.DataFrame:
-    logger.info("Starting transformation...")
-    cleaner = DataCleaner(
-        required_columns=["beneficiary_id"],
-        date_columns=["date"],
-    )
-    clean_beneficiaries = cleaner.run(raw_beneficiaries)
-    clean_gifts = cleaner.run(raw_gifts)
+def _quarantine_invalid_rows(master_df: pd.DataFrame, cfg: PipelineConfig) -> Path:
+    cfg.quarantine_dir.mkdir(parents=True, exist_ok=True)
+    ts = pd.Timestamp.utcnow().strftime("%Y%m%d_%H%M%S")
+    path = cfg.quarantine_dir / f"invalid_rows_{ts}.csv"
+    master_df.to_csv(path, index=False)
+    logger.warning("Validation failed; quarantined rows to %s", path)
+    return path
 
-    mapper = EntityMapper(right_df=clean_gifts)
-    master_df = mapper.run(clean_beneficiaries)
-    logger.info("Master table shape: %s", master_df.shape)
+
+def validate_data_sync(master_df: pd.DataFrame, cfg: PipelineConfig) -> bool:
+    schema_ok = SchemaValidator(
+        required_columns=["id", "beneficiary_name", "gift_type", "amount", "date"]
+    ).run(master_df)
+    id_ok = IDValidator(id_column="id").run(master_df)
+    passed = schema_ok and id_ok
+
+    if not passed and cfg.quarantine_invalid_rows:
+        _quarantine_invalid_rows(master_df, cfg)
+
+    return passed
+
+
+def load_data_sync(master_df: pd.DataFrame, loaders: list[BaseLoader] | None = None) -> None:
+    active_loaders = loaders or [
+        SQLiteLoader(table_name="master_table", if_exists="replace"),
+        CSVLoader(prefix="master_table"),
+    ]
+    for loader in active_loaders:
+        loader.run(master_df)
+
+
+def run_pipeline_sync(
+    config_obj: PipelineConfig | None = None,
+    beneficiaries_extractor: BaseExtractor | None = None,
+    gifts_extractor: BaseExtractor | None = None,
+    loaders: list[BaseLoader] | None = None,
+) -> pd.DataFrame:
+    """Run the pipeline synchronously without Prefect orchestration."""
+    cfg = config_obj or PipelineConfig()
+
+    # Backward-compat bridge for existing callers
+    if not cfg.entities and (beneficiaries_extractor is not None or gifts_extractor is not None):
+        cfg.entities = [
+            EntityConfig(
+                name="beneficiaries",
+                extractor=beneficiaries_extractor,
+                required_columns=["beneficiary_id"],
+            ),
+            EntityConfig(
+                name="gifts",
+                extractor=gifts_extractor,
+                required_columns=["beneficiary_id"],
+                date_columns=["date"],
+            ),
+        ]
+        cfg.source_mode = "custom"
+
+    frames = extract_entities_sync(cfg)
+    master_df = transform_entities_sync(cfg, frames)
+    if not validate_data_sync(master_df, cfg):
+        raise ValueError("Data validation failed. Aborting pipeline.")
+    load_data_sync(master_df, loaders=loaders)
     return master_df
 
 
-@task(name="Validate Data")
-def validate_data(master_df: pd.DataFrame) -> bool:
-    logger.info("Starting validation...")
-    schema_ok = SchemaValidator(
-        required_columns=["id", "beneficiary_name", "gift_type", "amount", "date"],
-    ).run(master_df)
+@task(name="Extract Entities")
+def extract_entities(config_obj: PipelineConfig) -> dict[str, pd.DataFrame]:
+    return extract_entities_sync(config_obj)
 
-    id_ok = IDValidator(id_column="id").run(master_df)
-    
-    if not (schema_ok and id_ok):
-        logger.error("Validation failed.")
-        return False
-    return True
+
+@task(name="Transform Entities")
+def transform_entities(config_obj: PipelineConfig, entity_frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    return transform_entities_sync(config_obj, entity_frames)
+
+
+@task(name="Validate Data")
+def validate_data(config_obj: PipelineConfig, master_df: pd.DataFrame) -> bool:
+    return validate_data_sync(master_df, config_obj)
 
 
 @task(name="Load Data")
-def load_data(master_df: pd.DataFrame) -> None:
-    logger.info("Starting load...")
-    SQLiteLoader(table_name="master_table", if_exists="replace").run(master_df)
-    CSVLoader(prefix="master_table").run(master_df)
+def load_data(master_df: pd.DataFrame, loaders: list[BaseLoader] | None = None) -> None:
+    load_data_sync(master_df, loaders=loaders)
 
-
-# ──────────────────────────────────────────────────────────────────────
-# Orchestrator Flow
-# ──────────────────────────────────────────────────────────────────────
 
 @flow(name="Automated ETL Pipeline", retries=2, retry_delay_seconds=60)
-def run_pipeline(use_playwright: bool = False) -> None:
-    """
-    Execute the full ETL pipeline with Prefect orchestration.
-    """
-    logger.info("=" * 60)
-    logger.info("ETL Pipeline starting.")
-    logger.info("=" * 60)
+def run_pipeline(
+    config_obj: PipelineConfig | None = None,
+    beneficiaries_extractor: BaseExtractor | None = None,
+    gifts_extractor: BaseExtractor | None = None,
+    loaders: list[BaseLoader] | None = None,
+) -> pd.DataFrame:
+    """Execute the full ETL pipeline with Prefect orchestration."""
+    cfg = config_obj or PipelineConfig()
 
-    try:
-        # 1. Extract
-        raw_beneficiaries, raw_gifts = extract_data(use_playwright=use_playwright)
+    if not cfg.entities and (beneficiaries_extractor is not None or gifts_extractor is not None):
+        cfg.entities = [
+            EntityConfig(
+                name="beneficiaries",
+                extractor=beneficiaries_extractor,
+                required_columns=["beneficiary_id"],
+            ),
+            EntityConfig(
+                name="gifts",
+                extractor=gifts_extractor,
+                required_columns=["beneficiary_id"],
+                date_columns=["date"],
+            ),
+        ]
+        cfg.source_mode = "custom"
 
-        # 2. Transform
-        master_df = transform_data(raw_beneficiaries, raw_gifts)
-
-        # 3. Validate
-        is_valid = validate_data(master_df)
-        if not is_valid:
-            raise ValueError("Data validation failed. Aborting pipeline.")
-
-        # 4. Load
-        load_data(master_df)
-
-        logger.info("=" * 60)
-        logger.info("Pipeline completed successfully.")
-        logger.info("=" * 60)
-
-    except Exception as exc:
-        logger.exception("Pipeline encountered a fatal error: %s", exc)
-        raise exc
+    frames = extract_entities(cfg)
+    master_df = transform_entities(cfg, frames)
+    if not validate_data(cfg, master_df):
+        raise ValueError("Data validation failed. Aborting pipeline.")
+    load_data(master_df, loaders=loaders)
+    return master_df
 
 
 if __name__ == "__main__":
     run_pipeline()
-

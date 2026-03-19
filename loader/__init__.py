@@ -1,6 +1,8 @@
-"""loader/__init__.py"""
-from .base_loader import BaseLoader
-from .sqlite_loader import SQLiteLoader
-from .csv_loader import CSVLoader
+"""Loader package exports."""
 
-__all__ = ["BaseLoader", "SQLiteLoader", "CSVLoader"]
+from .base_loader import BaseLoader
+from .csv_loader import CSVLoader
+from .s3_loader import S3Loader
+from .sqlite_loader import SQLiteLoader
+
+__all__ = ["BaseLoader", "SQLiteLoader", "CSVLoader", "S3Loader"]
