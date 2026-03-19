@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "automated-etl-pipeline-suite"
+version = "0.1.0"
+description = "Modular ETL toolkit for extraction, transformation, validation, and loading."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "ETL Pipeline Contributors"}]
+dependencies = [
+  "beautifulsoup4>=4.12.0",
+  "playwright>=1.42.0",
+  "pandas>=2.2.0",
+  "requests>=2.31.0",
+  "SQLAlchemy>=2.0.0",
+  "lxml>=5.1.0",
+  "prefect>=3.0.0",
+  "python-json-logger>=2.0.7",
+  "boto3>=1.34.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+]
+
+[tool.setuptools]
+packages = ["etl_pipeline", "extractor", "transformer", "validator", "loader"]
