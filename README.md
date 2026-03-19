@@ -84,6 +84,13 @@ Artifacts produced:
 
 ---
 
+
+- `output/master_table_YYYYMMDD_HHMMSS.csv`
+- `etl_output.db`
+- `logs/etl.log`
+
+---
+
 ## Use as a library
 
 ### One-shot API (`run_etl`)
@@ -151,11 +158,6 @@ Pipeline runtime mode is configured with `PipelineConfig` in `pipeline.py`:
 - `source_mode="synthetic"` for sample input
 - `source_mode="custom"` for injected extractors
 
-Extractor error behavior:
-
-- default is **fail fast** (`raise_on_error=True`)
-- set `raise_on_error=False` per extractor to return empty DataFrames on source failures
-
 ---
 
 ## Troubleshooting
@@ -182,6 +184,46 @@ Inspect logs at `logs/etl.log` and verify extracted columns include:
 - `gift_type`
 - `amount`
 - `date`
+
+---
+
+## CI
+
+## Library Usage
+
+You can use this project as an importable library:
+
+```python
+from etl_pipeline import ETLPipelineBuilder
+from extractor.web_extractor import WebExtractor
+from extractor.api_extractor import APIExtractor
+
+pipeline = (
+    ETLPipelineBuilder()
+    .with_source_mode("custom")
+    .with_beneficiaries_extractor(WebExtractor("https://example.com/beneficiaries"))
+    .with_gifts_extractor(APIExtractor("https://example.com/api/gifts", page_size=100))
+    .build()
+)
+
+master_df = pipeline.run()
+```
+
+For one-shot execution, use `run_etl(...)` from `etl_pipeline`.
+
+---
+
+## Real-source Testing
+
+The suite now includes integration-style tests that use:
+- a real local HTTP server for `WebExtractor` and `APIExtractor`
+- a real temporary SQLite database for `DatabaseExtractor`
+
+Run all tests with:
+
+```bash
+pytest -v
+```
 
 ---
 
