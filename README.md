@@ -1,118 +1,83 @@
-# ETL Pipeline Suite
+# etl-pipeline (Domain-Agnostic ETL Library)
 
-![CI](https://github.com/YOUR_USERNAME/etl_pipeline/actions/workflows/verify.yml/badge.svg)
+A generic ETL **library** for any domain (users/orders, IoT, finance, social media), with sync + async execution, hooks, middleware, schema controls, and optional checkpointing.
 
-A modular, object-oriented Python ETL pipeline for web and API data extraction, transformation, validation, and loading. Orchestrated by Prefect.
+## Architecture
 
----
-
-## Project Structure
-
-```
-etl_pipeline/
-├── config.py                    # Central settings & structured JSON logging
-├── pipeline.py                  # Prefect Orchestrator (Extract→Transform→Validate→Load)
-├── requirements.txt
-├── Dockerfile                   # For containerization
-├── .dockerignore
-│
-├── extractor/
-│   ├── base_extractor.py
-│   ├── web_extractor.py
-│   ├── playwright_extractor.py
-│   ├── api_extractor.py         # REST API source
-│   └── db_extractor.py          # SQLAlchemy DB source
-│
-├── transformer/
-│   ├── base_transformer.py
-│   ├── cleaner.py
-│   └── mapper.py
-│
-├── validator/
-│   ├── base_validator.py
-│   ├── schema_validator.py
-│   └── id_validator.py
-│
-├── loader/
-│   ├── base_loader.py
-│   ├── sqlite_loader.py         # Versioned SQLAlchemy SQLite output
-│   ├── csv_loader.py            # Versioned timestamped CSV output
-│   └── s3_loader.py             # Push to AWS S3 buckets
-│
-├── tests/
-│
-├── .github/workflows/
-│   └── verify.yml               # CI with scheduled runs & Docker build check
+```mermaid
+flowchart LR
+  E[Extractors (N)] --> J[Join Engine]
+  J --> T[Transform Chain]
+  T --> V[Schema/Validation]
+  V --> L[Loaders (N)]
+  E -.hooks/middleware.-> O[Observability]
+  T -.lineage.-> O
 ```
 
----
-
-## Quick Start
-
-### 1. Install dependencies
+## Install
 
 ```bash
-pip install -r requirements.txt
-playwright install chromium
+pip install etl-pipeline
 ```
 
-### 2. Configure your source
+Extras:
 
-Edit `config.py`:
+```bash
+pip install "etl-pipeline[web]"    # playwright/bs4/lxml
+pip install "etl-pipeline[s3]"     # boto3
+pip install "etl-pipeline[async]"  # aiohttp/aiosqlite/asyncpg
+```
+
+## Quick generic example
 
 ```python
-DEFAULT_SCRAPE_URL = "https://your-target-site.com"
-BENEFICIARY_JOIN_KEY = "beneficiary_id"
-SQLITE_DB_PATH = BASE_DIR / "etl_output.db"
+from etl_pipeline import ETLPipelineBuilder, JoinSpec
+from etl_pipeline.extractors import APIExtractor
+from etl_pipeline.transformers import DataCleaner
+
+pipeline = (
+    ETLPipelineBuilder()
+    .add_extractor("users", APIExtractor(name="users", url="https://api.example.com/users"))
+    .add_extractor("orders", APIExtractor(name="orders", url="https://api.example.com/orders"))
+    .add_join(JoinSpec(left="users", right="orders", left_on="user_id", right_on="user_id"))
+    .add_transformer(DataCleaner())
+    .build()
+)
+
+result = pipeline.run()
+print(result.success, result.metrics)
 ```
 
-### 3. Run the pipeline (dry-run with synthetic data)
+## Declarative config
 
-```bash
-python pipeline.py
+```python
+from etl_pipeline.pipeline import Pipeline
+from etl_pipeline.plugins import PluginRegistry
 ```
 
-Outputs:
-- `output/master_table_YYYYMMDD_HHMMSS.csv`
-- `etl_output.db` (SQLite)
-- `logs/etl.log`
+Use `Pipeline.from_dict(...)` or `Pipeline.from_yaml(...)` with registry mappings.
 
-### 4. Run tests
+## Advanced features included
 
-```bash
-python -m pytest tests/ -v
-```
+- Async-first extractor/transformer/loader interfaces
+- Schema registry + evolution strategies
+- Immutable lineage context and Mermaid export
+- Middleware + hooks system
+- Flow control config and checkpoint support
+- Structured `ExtractionResult` and `PipelineResult`
 
----
+## Migration notes
 
-## Extending the Pipeline
+- Old beneficiaries/gifts concepts are now examples, not core architecture.
+- Use `add_extractor(...)` + `add_join(...)` for domain-agnostic composition.
+- Legacy aliases remain in builder (`with_beneficiaries_extractor`, `with_gifts_extractor`) for compatibility.
 
-| Task | What to do |
-|---|---|
-| New data source | Subclass `BaseExtractor`, override `extract()` |
-| Custom JS interaction | Subclass `PlaywrightExtractor`, override `_parse_page(page)` |
-| New cleaning rule | Subclass `DataCleaner` or extend `transform()` |
-| Different join logic | Subclass `EntityMapper`, set `how="inner"` etc. |
-| Load to PostgreSQL | Subclass `BaseLoader`, swap the SQLAlchemy URL |
+## Examples
 
----
+See `examples/`:
+- `users_orders.py`
+- `async_extraction.py`
 
-## Master Table Schema
+## ADRs
 
-| Column | Type | Description |
-|---|---|---|
-| `id` | str | Primary key (Gift ID) |
-| `beneficiary_name` | str | Recipient full name |
-| `gift_type` | str | Cash / In-Kind / Other |
-| `amount` | float | Monetary value |
-| `date` | datetime | Date of gift |
-| `status` | str | Beneficiary status |
-| `source_url` | str | Scraped from URL |
-| `processed_at` | datetime | UTC pipeline run time |
-
----
-
-## GitHub Actions
-
-CI runs on every push to `main` / `develop` and on all PRs.
-Installs Playwright with Chromium and runs `pytest` across Python 3.11 and 3.12.
+See `docs/adr/0001-domain-agnostic-library.md`.
