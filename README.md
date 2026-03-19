@@ -84,6 +84,13 @@ Artifacts produced:
 
 ---
 
+
+- `output/master_table_YYYYMMDD_HHMMSS.csv`
+- `etl_output.db`
+- `logs/etl.log`
+
+---
+
 ## Use as a library
 
 ### One-shot API (`run_etl`)
@@ -220,6 +227,6 @@ pytest -v
 
 ---
 
-## GitHub Actions
+## CI
 
 GitHub Actions runs tests across Python 3.11 and 3.12 and verifies Docker build.

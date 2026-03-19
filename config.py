@@ -32,6 +32,13 @@ REQUEST_TIMEOUT_SECONDS = 30
 PLAYWRIGHT_HEADLESS = True                          # Set False to debug visually
 
 # ──────────────────────────────────────────────
+# Extractor resilience defaults
+# ──────────────────────────────────────────────
+EXTRACT_RAISE_ON_ERROR = True
+API_MAX_RETRIES = 3
+API_BACKOFF_FACTOR = 0.5
+
+# ──────────────────────────────────────────────
 # Transformer defaults
 # ──────────────────────────────────────────────
 BENEFICIARY_JOIN_KEY = "beneficiary_id"            # Shared column for entity mapping
