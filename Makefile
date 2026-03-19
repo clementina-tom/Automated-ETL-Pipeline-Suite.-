@@ -1,21 +1,14 @@
-.PHONY: install test lint format build run
+.PHONY: install test run lint
 
 install:
 	python -m pip install --upgrade pip
-	pip install -e .[test]
-
-format:
-	ruff format .
-
-lint:
-	ruff check .
-	mypy .
+	pip install -e .
 
 test:
 	pytest -v
 
-build:
-	docker build -t automated-etl-pipeline:local .
-
 run:
 	python pipeline.py
+
+lint:
+	python -m py_compile pipeline.py

@@ -1,112 +1,78 @@
+"""Library-first API for embedding the ETL pipeline into other applications."""
+
 from dataclasses import dataclass, field
 
-from .base import BaseExtractor, BaseLoader, BaseTransformer
-from .hooks import PipelineHook
-from .pipeline import JoinSpec, Pipeline
+import pandas as pd
 
-
-@dataclass
-class PipelineConfig:
-    source_mode: str = "custom"
+from extractor.base_extractor import BaseExtractor
+from loader.base_loader import BaseLoader
+from pipeline import PipelineConfig, run_pipeline_sync
 
 
 @dataclass
 class ETLPipeline:
-    extractors: dict[str, BaseExtractor]
-    transformers: list[BaseTransformer] = field(default_factory=list)
-    loaders: list[BaseLoader] = field(default_factory=list)
-    joins: list[JoinSpec] = field(default_factory=list)
-    hooks: list[PipelineHook] = field(default_factory=list)
+    """A reusable pipeline object suitable for library consumers."""
 
-    def run_with_result(self):
-        return Pipeline(
-            extractors=self.extractors,
-            transformers=self.transformers,
+    config: PipelineConfig = field(default_factory=PipelineConfig)
+    beneficiaries_extractor: BaseExtractor | None = None
+    gifts_extractor: BaseExtractor | None = None
+    loaders: list[BaseLoader] | None = None
+
+    def run(self) -> pd.DataFrame:
+        """Execute the configured ETL pipeline and return the master DataFrame."""
+        return run_pipeline_sync(
+            config_obj=self.config,
+            beneficiaries_extractor=self.beneficiaries_extractor,
+            gifts_extractor=self.gifts_extractor,
             loaders=self.loaders,
-            joins=self.joins,
-            hooks=self.hooks,
-        ).run()
-
-    def run(self):
-        return self.run_with_result().data
+        )
 
 
 class ETLPipelineBuilder:
+    """Fluent builder for assembling ETLPipeline instances."""
+
     def __init__(self) -> None:
-        self._extractors: dict[str, BaseExtractor] = {}
-        self._transformers: list[BaseTransformer] = []
-        self._loaders: list[BaseLoader] = []
-        self._joins: list[JoinSpec] = []
-        self._hooks: list[PipelineHook] = []
+        self._config = PipelineConfig()
+        self._beneficiaries_extractor: BaseExtractor | None = None
+        self._gifts_extractor: BaseExtractor | None = None
+        self._loaders: list[BaseLoader] | None = None
 
-    def add_extractor(self, name: str, extractor: BaseExtractor) -> "ETLPipelineBuilder":
-        self._extractors[name] = extractor
-        return self
-
-    def add_transformer(self, transformer: BaseTransformer) -> "ETLPipelineBuilder":
-        self._transformers.append(transformer)
-        return self
-
-    def add_loader(self, loader: BaseLoader) -> "ETLPipelineBuilder":
-        self._loaders.append(loader)
-        return self
-
-    def add_join(self, join: JoinSpec) -> "ETLPipelineBuilder":
-        self._joins.append(join)
-        return self
-
-    def add_hook(self, hook: PipelineHook) -> "ETLPipelineBuilder":
-        self._hooks.append(hook)
+    def with_source_mode(self, mode: str) -> "ETLPipelineBuilder":
+        self._config.source_mode = mode
         return self
 
     def with_beneficiaries_extractor(self, extractor: BaseExtractor) -> "ETLPipelineBuilder":
-        return self.add_extractor("beneficiaries", extractor)
+        self._beneficiaries_extractor = extractor
+        return self
 
     def with_gifts_extractor(self, extractor: BaseExtractor) -> "ETLPipelineBuilder":
-        return self.add_extractor("gifts", extractor)
+        self._gifts_extractor = extractor
+        return self
 
-    def with_source_mode(self, mode: str) -> "ETLPipelineBuilder":
-        _ = mode
+    def with_loaders(self, loaders: list[BaseLoader]) -> "ETLPipelineBuilder":
+        self._loaders = loaders
         return self
 
     def build(self) -> ETLPipeline:
-        joins = self._joins
-        if not joins and {"beneficiaries", "gifts"}.issubset(self._extractors.keys()):
-            joins = [JoinSpec(left="beneficiaries", right="gifts", left_on="beneficiary_id", right_on="beneficiary_id")]
         return ETLPipeline(
-            extractors=self._extractors,
-            transformers=self._transformers,
+            config=self._config,
+            beneficiaries_extractor=self._beneficiaries_extractor,
+            gifts_extractor=self._gifts_extractor,
             loaders=self._loaders,
-            joins=joins,
-            hooks=self._hooks,
         )
 
 
 def run_etl(
-    extractors: dict[str, BaseExtractor] | None = None,
-    transformers: list[BaseTransformer] | None = None,
-    loaders: list[BaseLoader] | None = None,
-    joins: list[JoinSpec] | None = None,
     config: PipelineConfig | None = None,
     beneficiaries_extractor: BaseExtractor | None = None,
     gifts_extractor: BaseExtractor | None = None,
-):
-    _ = config
-    active_extractors = extractors or {}
-    if beneficiaries_extractor is not None:
-        active_extractors["beneficiaries"] = beneficiaries_extractor
-    if gifts_extractor is not None:
-        active_extractors["gifts"] = gifts_extractor
-
-    active_joins = joins
-    if active_joins is None and {"beneficiaries", "gifts"}.issubset(active_extractors.keys()):
-        active_joins = [
-            JoinSpec(left="beneficiaries", right="gifts", left_on="beneficiary_id", right_on="beneficiary_id")
-        ]
-
-    return ETLPipeline(
-        extractors=active_extractors,
-        transformers=transformers or [],
-        loaders=loaders or [],
-        joins=active_joins or [],
-    ).run()
+    loaders: list[BaseLoader] | None = None,
+) -> pd.DataFrame:
+    """Convenience function for one-shot execution in library consumers."""
+    pipeline = ETLPipeline(
+        config=config or PipelineConfig(),
+        beneficiaries_extractor=beneficiaries_extractor,
+        gifts_extractor=gifts_extractor,
+        loaders=loaders,
+    )
+    return pipeline.run()

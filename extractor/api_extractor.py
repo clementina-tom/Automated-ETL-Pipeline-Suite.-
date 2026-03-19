@@ -10,7 +10,6 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-
 import config
 from extractor.base_extractor import BaseExtractor
 
@@ -29,53 +28,32 @@ class APIExtractor(BaseExtractor):
         endpoint_url: str,
         auth_token: str | None = None,
         page_size: int = 100,
-        raise_on_error: bool = config.EXTRACT_RAISE_ON_ERROR,
-        max_retries: int = config.API_MAX_RETRIES,
-        backoff_factor: float = config.API_BACKOFF_FACTOR,
     ) -> None:
-        super().__init__(endpoint_url, raise_on_error=raise_on_error)
+        super().__init__(endpoint_url)
         self.auth_token = auth_token
         self.page_size = page_size
-        self.max_retries = max_retries
-        self.backoff_factor = backoff_factor
         self.headers: dict[str, str] = {}
         if self.auth_token:
             self.headers["Authorization"] = f"Bearer {self.auth_token}"
-
-        retry = Retry(
-            total=self.max_retries,
-            connect=self.max_retries,
-            read=self.max_retries,
-            backoff_factor=self.backoff_factor,
-            status_forcelist=(429, 500, 502, 503, 504),
-            allowed_methods=frozenset(["GET"]),
-            raise_on_status=False,
-        )
-        adapter = HTTPAdapter(max_retries=retry)
-        self.session = requests.Session()
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-
-    def _request_page(self, page: int) -> list[dict[str, Any]]:
-        params = {"page": page, "size": self.page_size}
-        self.logger.debug("Fetching API page %d from %s", page, self.source)
-
-        response = self.session.get(
-            self.source,
-            headers=self.headers,
-            params=params,
-            timeout=config.REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        return payload.get("data", []) if isinstance(payload, dict) else payload
 
     def extract(self) -> pd.DataFrame:
         all_records: list[dict[str, Any]] = []
         page = 1
 
         while True:
-            records = self._request_page(page)
+            params = {"page": page, "size": self.page_size}
+            self.logger.debug("Fetching API page %d from %s", page, self.source)
+
+            response = requests.get(
+                self.source,
+                headers=self.headers,
+                params=params,
+                timeout=config.REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+
+            payload = response.json()
+            records = payload.get("data", []) if isinstance(payload, dict) else payload
 
             if not records:
                 break

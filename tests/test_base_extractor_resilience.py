@@ -21,11 +21,3 @@ def test_extractor_returns_empty_df_when_raise_on_error_false():
     extractor = FailingExtractor("test://source", raise_on_error=False)
     result = extractor.run()
     assert result.empty
-
-
-def test_extractor_run_result_contains_error():
-    extractor = FailingExtractor("test://source", raise_on_error=False)
-    result = extractor.run_result()
-    assert result.success is False
-    assert isinstance(result.error, RuntimeError)
-    assert result.data.empty
