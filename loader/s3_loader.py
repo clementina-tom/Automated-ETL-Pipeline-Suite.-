@@ -1,46 +1,45 @@
 """
 loader/s3_loader.py
-A loader for pushing processed data as CSV or Parquet to an S3 bucket.
+A loader for pushing processed data as CSV to an S3 bucket.
 """
 
 import io
-import pandas as pd
+
 import boto3
-from botocore.exceptions import NoCredentialsError, ClientError
+import pandas as pd
+from botocore.exceptions import ClientError, NoCredentialsError
 
-from config import get_logger
 from loader.base_loader import BaseLoader
-
-logger = get_logger("s3_loader")
 
 
 class S3Loader(BaseLoader):
     """
-    Loads DataFrame directly into AWS S3 as CSV without intermediate files.
+    Load a DataFrame directly into AWS S3 as CSV without intermediate files.
     """
 
     def __init__(self, bucket_name: str, object_key: str):
+        super().__init__()
         self.bucket_name = bucket_name
         self.object_key = object_key
         self.s3_client = boto3.client("s3")
 
-    def run(self, df: pd.DataFrame) -> None:
-        logger.info("Starting upload to s3://%s/%s", self.bucket_name, self.object_key)
-        
+    def load(self, df: pd.DataFrame) -> None:
+        self.logger.info("Uploading to s3://%s/%s", self.bucket_name, self.object_key)
+
         csv_buffer = io.StringIO()
         df.to_csv(csv_buffer, index=False)
         csv_buffer.seek(0)
-        
+
         try:
             self.s3_client.put_object(
                 Bucket=self.bucket_name,
                 Key=self.object_key,
-                Body=csv_buffer.getvalue()
+                Body=csv_buffer.getvalue(),
             )
-            logger.info("Successfully uploaded data to S3.")
+            self.logger.info("Successfully uploaded data to S3.")
         except NoCredentialsError:
-            logger.error("AWS credentials not found. S3 upload failed.")
+            self.logger.error("AWS credentials not found. S3 upload failed.")
             raise
-        except ClientError as e:
-            logger.error("S3 ClientError during upload: %s", e)
+        except ClientError as exc:
+            self.logger.error("S3 ClientError during upload: %s", exc)
             raise

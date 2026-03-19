@@ -112,6 +112,45 @@ python -m pytest tests/ -v
 
 ---
 
+
+## Library Usage
+
+You can use this project as an importable library:
+
+```python
+from etl_pipeline import ETLPipelineBuilder
+from extractor.web_extractor import WebExtractor
+from extractor.api_extractor import APIExtractor
+
+pipeline = (
+    ETLPipelineBuilder()
+    .with_source_mode("custom")
+    .with_beneficiaries_extractor(WebExtractor("https://example.com/beneficiaries"))
+    .with_gifts_extractor(APIExtractor("https://example.com/api/gifts", page_size=100))
+    .build()
+)
+
+master_df = pipeline.run()
+```
+
+For one-shot execution, use `run_etl(...)` from `etl_pipeline`.
+
+---
+
+## Real-source Testing
+
+The suite now includes integration-style tests that use:
+- a real local HTTP server for `WebExtractor` and `APIExtractor`
+- a real temporary SQLite database for `DatabaseExtractor`
+
+Run all tests with:
+
+```bash
+pytest -v
+```
+
+---
+
 ## GitHub Actions
 
 CI runs on every push to `main` / `develop` and on all PRs.
