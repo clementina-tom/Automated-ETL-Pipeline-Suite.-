@@ -151,6 +151,11 @@ Pipeline runtime mode is configured with `PipelineConfig` in `pipeline.py`:
 - `source_mode="synthetic"` for sample input
 - `source_mode="custom"` for injected extractors
 
+Extractor error behavior:
+
+- default is **fail fast** (`raise_on_error=True`)
+- set `raise_on_error=False` per extractor to return empty DataFrames on source failures
+
 ---
 
 ## Troubleshooting
