@@ -20,38 +20,55 @@ class ExtractionResult:
 
 
 class BaseExtractor(ABC):
-    """Base class for extractors with consistent logging and error behavior."""
+    """
+    Every extractor must implement :meth:`extract`.
+    Shared logging and a basic :meth:`run` wrapper with error handling
+    are provided here so concrete subclasses stay focused on extraction logic.
+    """
 
     def __init__(
         self,
         source: str,
         raise_on_error: bool = config.EXTRACT_RAISE_ON_ERROR,
     ) -> None:
+        """
+        Args:
+            source: URL, file path, or API endpoint to extract data from.
+            raise_on_error: If True, extraction errors are re-raised.
+                            If False, :meth:`run` returns an empty DataFrame.
+        """
         self.source = source
         self.raise_on_error = raise_on_error
         self.logger = get_logger(self.__class__.__name__)
 
     @abstractmethod
     def extract(self) -> pd.DataFrame:
+        """
+        Pull data from :attr:`source` and return it as a raw DataFrame.
+
+        Returns:
+            pd.DataFrame: Raw, un-transformed data.
+        """
         ...
 
-    def run_result(self) -> ExtractionResult:
-        """Run extractor and return structured result instead of raising."""
+    def run(self) -> pd.DataFrame:
+        """
+        Public entry point: calls :meth:`extract` with full error handling.
+
+        Returns:
+            pd.DataFrame: Raw data.
+
+        Raises:
+            Exception: Re-raised when ``raise_on_error`` is True.
+        """
         self.logger.info("Starting extraction from: %s", self.source)
         try:
             df = self.extract()
             self.logger.info("Extraction complete. Rows returned: %d", len(df))
-            return ExtractionResult(data=df)
+            return df
         except Exception as exc:
             self.logger.exception("Extraction failed for source '%s': %s", self.source, exc)
-            return ExtractionResult(data=pd.DataFrame(), error=exc)
-
-    def run(self) -> pd.DataFrame:
-        """Run extractor and return DataFrame, optionally fail-fast."""
-        result = self.run_result()
-        if result.success:
-            return result.data
-        if self.raise_on_error and result.error is not None:
-            raise result.error
-        self.logger.warning("Returning empty DataFrame because raise_on_error=False")
-        return result.data
+            if self.raise_on_error:
+                raise
+            self.logger.warning("Returning empty DataFrame because raise_on_error=False")
+            return pd.DataFrame()

@@ -14,13 +14,8 @@ class DatabaseExtractor(BaseExtractor):
     Extract data from a SQL database using SQLAlchemy.
     """
 
-    def __init__(
-        self,
-        connection_string: str,
-        query: str,
-        raise_on_error: bool = True,
-    ) -> None:
-        super().__init__(source=connection_string, raise_on_error=raise_on_error)
+    def __init__(self, connection_string: str, query: str) -> None:
+        super().__init__(source=connection_string)
         self.query = query
 
     def extract(self) -> pd.DataFrame:

@@ -46,17 +46,29 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 SQLITE_DB_PATH = BASE_DIR / "etl_output.db"
 SQLITE_DATABASE_URL = f"sqlite:///{SQLITE_DB_PATH}"
 
-DEFAULT_SCRAPE_URL = settings.default_scrape_url
-REQUEST_TIMEOUT_SECONDS = settings.request_timeout_seconds
-PLAYWRIGHT_HEADLESS = settings.playwright_headless
+# ──────────────────────────────────────────────
+# Extractor defaults
+# ──────────────────────────────────────────────
+DEFAULT_SCRAPE_URL = "https://example.com"         # Replace with your target URL
+REQUEST_TIMEOUT_SECONDS = 30
+PLAYWRIGHT_HEADLESS = True                          # Set False to debug visually
 
-BENEFICIARY_JOIN_KEY = settings.beneficiary_join_key
-GIFT_JOIN_KEY = settings.gift_join_key
+# ──────────────────────────────────────────────
+# Extractor resilience defaults
+# ──────────────────────────────────────────────
+EXTRACT_RAISE_ON_ERROR = True
+API_MAX_RETRIES = 3
+API_BACKOFF_FACTOR = 0.5
 
-EXTRACT_RAISE_ON_ERROR = settings.extract_raise_on_error
-API_MAX_RETRIES = settings.api_max_retries
-API_BACKOFF_FACTOR = settings.api_backoff_factor
+# ──────────────────────────────────────────────
+# Transformer defaults
+# ──────────────────────────────────────────────
+BENEFICIARY_JOIN_KEY = "beneficiary_id"            # Shared column for entity mapping
+GIFT_JOIN_KEY = "beneficiary_id"
 
+# ──────────────────────────────────────────────
+# Master table schema
+# ──────────────────────────────────────────────
 MASTER_COLUMNS = [
     "id",
     "beneficiary_name",
