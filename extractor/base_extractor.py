@@ -1,14 +1,22 @@
-"""
-extractor/base_extractor.py
-Abstract base class for all extractors.
-"""
+"""extractor/base_extractor.py: Abstract base class for all extractors."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import pandas as pd
 
 import config
 from config import get_logger
+
+
+@dataclass
+class ExtractionResult:
+    data: pd.DataFrame
+    error: Exception | None = None
+
+    @property
+    def success(self) -> bool:
+        return self.error is None
 
 
 class BaseExtractor(ABC):

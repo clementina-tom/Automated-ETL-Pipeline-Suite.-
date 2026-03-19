@@ -211,7 +211,7 @@ master_df = pipeline.run()
 
 For one-shot execution, use `run_etl(...)` from `etl_pipeline`.
 
----
+## Migration notes
 
 ## Real-source Testing
 
@@ -225,7 +225,9 @@ Run all tests with:
 pytest -v
 ```
 
----
+See `examples/`:
+- `users_orders.py`
+- `async_extraction.py`
 
 ## CI
 

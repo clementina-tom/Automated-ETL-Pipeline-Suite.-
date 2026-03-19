@@ -1,16 +1,41 @@
-"""
-config.py
-Central configuration, paths, and logging setup for the ETL pipeline.
-"""
+"""Central configuration, paths, and logging setup for the ETL pipeline."""
 
 import logging
-import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# ──────────────────────────────────────────────
-# Paths
-# ──────────────────────────────────────────────
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pythonjsonlogger import jsonlogger
+
+
+class Settings(BaseSettings):
+    """Environment-driven settings for secure/runtime-safe configuration."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    default_scrape_url: str = "https://example.com"
+    request_timeout_seconds: int = 30
+    playwright_headless: bool = True
+
+    beneficiary_join_key: str = "beneficiary_id"
+    gift_join_key: str = "beneficiary_id"
+
+    extract_raise_on_error: bool = True
+    api_max_retries: int = 3
+    api_backoff_factor: float = 0.5
+
+    aws_access_key_id: SecretStr | None = None
+    aws_secret_access_key: SecretStr | None = None
+    aws_default_region: str | None = None
+
+    log_level: str = "DEBUG"
+    log_max_bytes: int = 5 * 1024 * 1024
+    log_backup_count: int = 3
+
+
+settings = Settings()
+
 BASE_DIR = Path(__file__).parent.resolve()
 LOGS_DIR = BASE_DIR / "logs"
 OUTPUT_DIR = BASE_DIR / "output"
@@ -18,9 +43,6 @@ OUTPUT_DIR = BASE_DIR / "output"
 LOGS_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# ──────────────────────────────────────────────
-# Database
-# ──────────────────────────────────────────────
 SQLITE_DB_PATH = BASE_DIR / "etl_output.db"
 SQLITE_DATABASE_URL = f"sqlite:///{SQLITE_DB_PATH}"
 
@@ -58,43 +80,24 @@ MASTER_COLUMNS = [
     "processed_at",
 ]
 
-# ──────────────────────────────────────────────
-# Logging
-# ──────────────────────────────────────────────
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = getattr(logging, settings.log_level.upper(), logging.DEBUG)
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 LOG_FILE = LOGS_DIR / "etl.log"
-LOG_MAX_BYTES = 5 * 1024 * 1024   # 5 MB
-LOG_BACKUP_COUNT = 3
+LOG_MAX_BYTES = settings.log_max_bytes
+LOG_BACKUP_COUNT = settings.log_backup_count
 
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    Return a named logger configured with:
-      - RotatingFileHandler  → logs/etl.log (JSON)
-      - StreamHandler        → stdout (Text/JSON depending on environment)
-    """
-    try:
-        from pythonjsonlogger import jsonlogger
-        has_json_logger = True
-    except ImportError:
-        has_json_logger = False
-
+    """Return a named logger with rotating file + console JSON handlers."""
     logger = logging.getLogger(name)
 
-    if logger.handlers:          # Avoid duplicate handlers on re-import
+    if logger.handlers:
         return logger
 
     logger.setLevel(LOG_LEVEL)
-    
-    if has_json_logger:
-        formatter = jsonlogger.JsonFormatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
-    else:
-        # Fallback for plain text if jsonlogger isn't installed yet
-        formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    formatter = jsonlogger.JsonFormatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
 
-    # File handler
     fh = RotatingFileHandler(
         LOG_FILE,
         maxBytes=LOG_MAX_BYTES,
@@ -104,7 +107,6 @@ def get_logger(name: str) -> logging.Logger:
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    # Console handler
     ch = logging.StreamHandler()
     ch.setFormatter(formatter)
     logger.addHandler(ch)

@@ -77,7 +77,7 @@ def extract_data_sync(
         len(raw_beneficiaries),
         len(raw_gifts),
     )
-    return raw_beneficiaries, raw_gifts
+    return mapper.run(cleaned[cfg.left_entity])
 
 
 def transform_data_sync(raw_beneficiaries: pd.DataFrame, raw_gifts: pd.DataFrame) -> pd.DataFrame:
