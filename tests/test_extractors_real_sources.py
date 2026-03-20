@@ -7,9 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pandas as pd
 
-from extractor.api_extractor import APIExtractor
-from extractor.db_extractor import DatabaseExtractor
-from extractor.web_extractor import WebExtractor
+from etl_pipeline.extractors import APIExtractor, DatabaseExtractor, WebExtractor
 
 
 class _TestHandler(BaseHTTPRequestHandler):

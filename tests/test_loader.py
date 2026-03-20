@@ -8,8 +8,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from loader.csv_loader import CSVLoader
-from loader.sqlite_loader import SQLiteLoader
+from etl_pipeline.loaders import CSVLoader, SQLiteLoader
 
 
 # ──────────────────────────────────────────────

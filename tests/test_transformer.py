@@ -4,8 +4,7 @@ Unit tests for DataCleaner and EntityMapper.
 
 import pandas as pd
 
-from transformer.cleaner import DataCleaner
-from transformer.mapper import EntityMapper
+from etl_pipeline.transformers import DataCleaner, EntityMapper
 
 
 class TestDataCleaner:
