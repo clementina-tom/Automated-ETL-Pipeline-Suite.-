@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-BASE_DIR = Path(__file__).parent.resolve()
+BASE_DIR = Path(__file__).parent.parent.parent.resolve()
 LOGS_DIR = BASE_DIR / "logs"
 OUTPUT_DIR = BASE_DIR / "output"
 

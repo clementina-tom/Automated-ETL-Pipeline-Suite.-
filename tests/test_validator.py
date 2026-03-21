@@ -6,8 +6,7 @@ Unit tests for SchemaValidator and IDValidator.
 import pandas as pd
 import pytest
 
-from validator.schema_validator import SchemaValidator
-from validator.id_validator import IDValidator
+from etl_pipeline.validator import SchemaValidator, IDValidator
 
 
 # ──────────────────────────────────────────────

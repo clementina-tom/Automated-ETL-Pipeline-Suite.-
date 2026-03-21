@@ -3,7 +3,7 @@
 import pandas as pd
 
 from etl_pipeline import ETLPipelineBuilder, PipelineConfig, run_etl
-from extractor.base_extractor import BaseExtractor
+from etl_pipeline import BaseExtractor
 
 
 class StaticExtractor(BaseExtractor):

@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from extractor.base_extractor import BaseExtractor
+from etl_pipeline import BaseExtractor
 
 
 class FailingExtractor(BaseExtractor):
